@@ -2,6 +2,7 @@ from chromosome import *
 import numpy as np
 from time import time
 from sys import argv
+from itertools import izip
 
 g2dg = {sigmoid: lambda x: sigmoid(x) * (1- sigmoid(x)),
         relu: lambda x: (x > 0).astype(np.int),
@@ -52,8 +53,8 @@ def backprop(ch, x, y):
 
 
 def sgd_update(ch, grads, lr):
-    for layer, layer_grads in zip(ch.layers, grads):
-        for weight, grad in zip(layer, layer_grads):
+    for layer, layer_grads in izip(ch.layers, grads):
+        for weight, grad in izip(layer, layer_grads):
             weight -= lr * grad
 
 
@@ -61,7 +62,7 @@ def accuracy_and_loss_on(ch, images, labels, return_pred=False):
     if return_pred:
         preds = []
     total_loss = good = 0.0
-    for x, y in zip(images, labels):
+    for x, y in izip(images, labels):
         y_hat, _ = ch.forward(x)
         pred = np.argmax(y_hat)
         good += pred == int(y)
@@ -80,7 +81,7 @@ def train_on(ch, train_images, train_labels, dev_images, dev_labels, epochs=15, 
     for i in xrange(epochs):
         start = time()
         total_loss = good = 0.0
-        for x, y in zip(train_images, train_labels):
+        for x, y in izip(train_images, train_labels):
             pred, loss, grads = backprop(ch, x, y)
             good += pred == y
             total_loss += loss
@@ -94,7 +95,8 @@ def train_on(ch, train_images, train_labels, dev_images, dev_labels, epochs=15, 
 
 
 def main(sizes):
-    lr = 0.01
+    lr = 0.001
+    epochs = 30
 
     # load data
     dataloader = MNIST(return_type="numpy")
@@ -106,9 +108,13 @@ def main(sizes):
     dev_images, dev_labels = train_images[dev_indices], train_labels[dev_indices]
     train_images, train_labels = train_images[train_indices], train_labels[train_indices]
 
+    train_images = train_images.astype(np.float) / 255.0
+    dev_images = dev_images.astype(np.float)  / 255.0
+    test_images = test_images.astype(np.float) / 255.0
+
     # create net, train and test
-    net = Chromosome(sizes, sigmoid)
-    train_on(net, train_images, train_labels, dev_images, dev_labels, lr=lr)
+    net = Chromosome(sizes, relu)
+    train_on(net, train_images, train_labels, dev_images, dev_labels, lr=lr, epochs=epochs)
     test_acc, test_loss, preds = accuracy_and_loss_on(net, test_images, test_labels, True)
     print "\nTest accuracy {}%, with loss of {}".format(test_acc * 100, test_loss)
 
@@ -118,7 +124,7 @@ def main(sizes):
 
 if __name__ == '__main__':
     if len(argv) == 1:
-        sizes = [784, 200, 10]
+        sizes = [784, 200, 100, 40, 10]
     else:
         sizes = [784] + map(int, argv[1:]) + [10]
     main(sizes)

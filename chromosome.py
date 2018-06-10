@@ -1,5 +1,4 @@
 import numpy as np
-from mnist import MNIST
 
 
 class Chromosome:
@@ -50,3 +49,4 @@ def relu(x):
 
 
 tanh = np.tanh
+
