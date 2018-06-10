@@ -2,12 +2,15 @@ import numpy as np
 
 
 class Chromosome:
-    def __init__(self, sizes, activ_func):
-        self.layers = []
-        for s1, s2 in zip(sizes[:-1], sizes[1:]):
-            W = initialize_weight(s1, s2)
-            b = initialize_weight(s2)
-            self.layers.append((W, b))
+    def __init__(self, layers, activ_func, initialize = True):
+        if initialize:
+            self.layers = []
+            for s1, s2 in zip(layers[:-1], layers[1:]):
+                W = initialize_weight(s1, s2)
+                b = initialize_weight(s2)
+                self.layers.append((W, b))
+        else:
+            self.layers = layers
         self.activation_func = activ_func
         self.n = len(self.layers)
 
