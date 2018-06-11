@@ -107,7 +107,6 @@ def ranking(pool):
 
 
 def main(sizes):
-    mutate(Chromosome([50, 20, 10], relu), 0.9)
     # parameters
     activ_func = relu
     pool_size = 100

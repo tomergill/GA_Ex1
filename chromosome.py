@@ -2,7 +2,7 @@ import numpy as np
 
 
 class Chromosome:
-    def __init__(self, layers, activ_func, initialize = True):
+    def __init__(self, layers, activ_func, initialize=True):
         if initialize:
             self.layers = []
             for s1, s2 in zip(layers[:-1], layers[1:]):
