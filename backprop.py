@@ -3,14 +3,11 @@ import numpy as np
 from time import time
 from sys import argv
 from itertools import izip
+from mnist import MNIST
 
 g2dg = {sigmoid: lambda x: sigmoid(x) * (1- sigmoid(x)),
         relu: lambda x: (x > 0).astype(np.int),
         tanh: lambda x: 1 - np.square(tanh(x))}
-
-
-def neglogloss(y_hat, y):
-    return -np.log(y_hat[y])
 
 
 def backprop(ch, x, y):

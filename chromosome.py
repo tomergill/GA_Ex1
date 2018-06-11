@@ -53,3 +53,6 @@ def relu(x):
 
 tanh = np.tanh
 
+
+def neglogloss(y_hat, y):
+    return -np.log(y_hat[y])
