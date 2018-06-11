@@ -11,7 +11,7 @@ def mutate(c, prob):
     :type c: Chromosome
     :param c:
     :param prob:
-    :return:
+    :return: mutate
     """
     mu, sigma = 0, 0.1
     for l in c.layers:
