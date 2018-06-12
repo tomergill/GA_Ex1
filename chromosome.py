@@ -20,12 +20,14 @@ class Chromosome:
         h = x
         for W, b in self.layers[:-1]:
             z = W.dot(h) + b
+            z = z.T
             zs.append(z)
             h = g(z)
 
         # last layer
         W, b = self.layers[-1]
         z = W.dot(h) + b
+        z = z.T
         zs.append(z)
         return softmax(z), zs
 

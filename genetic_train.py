@@ -16,8 +16,9 @@ def mutate(c, prob):
     :return:
     """
     mu, sigma = 0, 0.1
-    for l in c.layers:
-        l = (l[0] + np.random.binomial(1,prob) * np.random.normal(mu, sigma, size=l[0].shape), l[1] + np.random.binomial(1, prob) * np.random.normal(mu, sigma, size=l[1].shape[0]))
+    for W, b in c.layers:
+        W += np.random.binomial(1,prob) * np.random.normal(mu, sigma, size=W.shape)
+        b += np.random.binomial(1, prob) * np.random.normal(mu, sigma, size=b.shape[0])
     return c
 
 
@@ -89,21 +90,63 @@ def random_set_from(images, labels, size=100):
     return x, y
 
 
-def accuracy_and_loss(net, X, Y):
-    total_loss = good = 0.0
-    for x, y in zip(X, Y):
-        out = net.forward(x)[0]
-        total_loss += neglogloss(out, y)
-        good += (np.argmax(out) == y)
-    return good / X.shape[0], total_loss / X.shape[0]
+def accuracy_and_loss(net, X, Y, return_preds=False):
+    # total_loss = good = 0.0
+    # for x, y in zip(X, Y):
+    #     out = net.forward(x)[0]
+    #     total_loss += neglogloss(out, y)
+    #     good += (np.argmax(out) == y)
+    # return good / X.shape[0], total_loss / X.shape[0]
+    out = batched_forward(net, X)
+    preds = np.argmax(out, axis=1)
+    acc = (preds == Y).sum() / float(X.shape[0])
+    loss = batched_neglogloss(out, Y).sum() / float(X.shape[0])
+
+    if return_preds:
+        return acc, loss, preds
+    return acc, loss
 
 
-def mate(ranking, crossover):
+def batched_forward(ch, X):
+    """
+    :type ch: Chromosome
+    :param ch:
+    :param X:
+    :return:
+    """
+    H = X.T
+    ones = np.ones(X.shape[0])
+    for W, b in ch.layers[:-1]:
+        Z = W.dot(H) + np.outer(b, ones)
+        H = ch.activation_func(Z)
+    W, b = ch.layers[-1]
+    Z = W.dot(H) + np.outer(b, ones)
+
+    # softmax
+    Z = Z.T
+    ones = np.ones(Z.shape[1])
+    exps = np.exp(Z - np.outer(Z.max(axis=1), ones))
+    preds = exps / np.outer(exps.sum(axis=1), ones)
+    return preds
+
+
+def batched_neglogloss(Y_hat, Y):
+    return -np.log(Y_hat[range(Y_hat.shape[0]), Y])
+
+
+def mate(ranking, crossover, elitism, elitism_fraction):
     new_pool = []
+    size = len(ranking)
+
+    if elitism:
+        elitism_size = int(len(ranking) * elitism_fraction)
+        new_pool.extend(ranking[:elitism_size])
+        ranking = ranking[:-elitism_size]
+
     tickets = {p: len(ranking) - i for i, p in enumerate(ranking)}
 
-    while len(new_pool) < len(ranking):
-        p1, p2 = choice(ranking), choice(ranking)
+    while len(new_pool) < size:
+        p1, p2 = np.random.choice(ranking, 2)
         if tickets[p1] <= 0 or tickets[p2] <= 0:
             continue
         tickets[p1] -= 1
@@ -127,18 +170,19 @@ def rank(pool, train_images, train_labels, sort_by_loss=True):
     return zip(*ranking)[0], worst_loss, worst_acc, best_loss, best_acc
 
 
-def train_on(pool, crossover, generations, train_images, train_labels, mutation_prob):
+def train_on(pool, crossover, generations, train_images, train_labels, mutation_prob, elitism=False,
+             elitism_fraction=0.05):
     print "+------------+-----------+------------+-----------+-----------+----------+"
     print "| Generation | Gen. Time | Worst Loss | Worst Acc | Best Loss | Best Acc |"
     print "+------------+-----------+------------+-----------+-----------+----------+"
     start = time()
     for i in xrange(generations - 1):
         ranking, worst_loss, worst_acc, best_loss, best_acc = rank(pool, train_images, train_labels)
-        new_pool = mate(ranking, crossover)
+        new_pool = mate(ranking, crossover, elitism, elitism_fraction)
         pool = map(lambda c: mutate(c, mutation_prob), new_pool)
 
         if i % 100 == 99:
-            print "| {:^10} | {:^8.f}s | {:^10.f} | {:^8.f}% | {:^9.f} | {:^7.f}% |".format(
+            print "| {:^10} | {:^8.4f}s | {:^10.4f} | {:^8.4f}% | {:^9.4f} | {:^7.4f}% |".format(
                 i+1, time() - start, worst_loss, worst_acc * 100.0, best_loss, best_acc * 100.0)
             start = time()
 
@@ -154,8 +198,10 @@ def main(sizes):
     activ_func = relu
     pool_size = 100
     generations = 1000
-    mutation_prob = 0.01
-    crossover = cross_over_by_layer  # todo crossover
+    mutation_prob = 0.1
+    crossover = cross_over_by_row  # todo crossover
+    elitism = True
+    elitism_fraction = 0.1
 
     # load data
     dataloader = MNIST(return_type="numpy")
@@ -165,7 +211,7 @@ def main(sizes):
     test_images = test_images.astype(np.float) / 255.0
 
     pool = create_pool(sizes, pool_size, activ_func)
-    best = train_on(pool, crossover, generations, train_images, train_labels, mutation_prob)
+    best = train_on(pool, crossover, generations, train_images, train_labels, mutation_prob, elitism, elitism_fraction)
     acc, loss = accuracy_and_loss(best, test_images, test_labels)
 
     print "Accuracy on Test Set is {}% and Loss is {}".format(acc * 100.0, loss)
@@ -174,7 +220,7 @@ def main(sizes):
 if __name__ == '__main__':
     #cross_over_full_layer(1,2)
     if len(argv) == 1:
-        sizes = [784, 200, 100, 40, 10]
+        sizes = [784, 200, 10]
     else:
         sizes = [784] + map(int, argv[1:]) + [10]
     main(sizes)
