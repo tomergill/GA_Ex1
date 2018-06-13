@@ -7,7 +7,6 @@ from mnist import MNIST
 
 
 
-
 def mutate(c, prob):
     """
     :type c: Chromosome
@@ -74,14 +73,8 @@ def cross_over_by_element(c1,c2):
     return Chromosome(layers, c1.activation_func if v[0] == 0 else c2.activation_func, initialize=False)
 
 
-
-
-
-
-
-
 def create_pool(sizes, pool_size, activ_funcs):
-    pool = [Chromosome(sizes, activ_funcs[np.random.choice(range(len(activ_funcs)), 1)]) for _ in xrange(pool_size)]
+    pool = [Chromosome(sizes, activ_funcs[np.random.choice(range(len(activ_funcs)), 1)[0]]) for _ in xrange(pool_size)]
     return pool
 
 
@@ -230,6 +223,15 @@ def main(sizes):
     crossover = cross_over_by_row
     elitism = True
     elitism_fraction = 0.1
+
+    print "* Pool Size = {}".format(pool_size)
+    print "* Generations = {}".format(generations)
+    print "* Mutation Prob = {}".format(mutation_prob)
+    print "* Crossover by {}".format({cross_over_by_row: "Row", cross_over_by_element: "Element", cross_over_by_layer: "Layer"}[crossover])
+    print "* Elitism is {}".format("ON" if elitism else "OFF")
+    if elitism:
+        print "\t# Elitism is {}%, which means {} chromosomes".format(elitism_fraction * 100.0, int(elitism_fraction * pool_size))
+    print ""
 
     # load data
     dataloader = MNIST(return_type="numpy")
