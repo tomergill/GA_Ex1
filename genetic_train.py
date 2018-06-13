@@ -16,10 +16,12 @@ def mutate(c, prob):
     :return:
     """
     mu, sigma = 0, 0.1
+    new_layers = []
     for W, b in c.layers:
-        W += np.random.binomial(1,prob) * np.random.normal(mu, sigma, size=W.shape)
-        b += np.random.binomial(1, prob) * np.random.normal(mu, sigma, size=b.shape[0])
-    return c
+        new_W = W + np.random.binomial(1,prob) * np.random.normal(mu, sigma, size=W.shape)
+        new_b = b + np.random.binomial(1, prob) * np.random.normal(mu, sigma, size=b.shape[0])
+        new_layers.append((new_W, new_b))
+    return Chromosome(new_layers, c.activation_func, False)
 
 
 def cross_over_by_row(c1, c2):
@@ -78,8 +80,8 @@ def cross_over_by_element(c1,c2):
 
 
 
-def create_pool(sizes, pool_size, activ_func):
-    pool = [Chromosome(sizes, activ_func) for _ in xrange(pool_size)]
+def create_pool(sizes, pool_size, activ_funcs):
+    pool = [Chromosome(sizes, activ_funcs[np.random.choice(range(len(activ_funcs)), 1)]) for _ in xrange(pool_size)]
     return pool
 
 
@@ -161,32 +163,58 @@ def rank(pool, train_images, train_labels, sort_by_loss=True):
     results = map(lambda c: accuracy_and_loss(c, x, y), pool)
     pool_acc, pool_loss = zip(*results)
 
-    best, worst = np.argmax(pool_acc), np.argmin(pool_acc)
-    best_acc, worst_acc = pool_acc[best], pool_acc[worst]
-    best_loss, worst_loss = pool_loss[best], pool_loss[worst]
+    # best, worst = np.argmax(pool_acc), np.argmin(pool_acc)
+    # best_acc, worst_acc = pool_acc[best], pool_acc[worst]
+    # best_loss, worst_loss = pool_loss[best], pool_loss[worst]
 
     zipped_pool = zip(pool, pool_loss) if sort_by_loss else zip(pool, pool_acc)
     ranking = sorted(zipped_pool, key=lambda x: x[1], reverse=not sort_by_loss)
-    return zip(*ranking)[0], worst_loss, worst_acc, best_loss, best_acc
+    return zip(*ranking)[0]  #, worst_loss, worst_acc, best_loss, best_acc
 
 
-def train_on(pool, crossover, generations, train_images, train_labels, mutation_prob, elitism=False,
-             elitism_fraction=0.05):
+def split_train_dev(images, labels, part=0.2, num_classes=10):
+    indices = range(images.shape[0])
+    np.random.shuffle(indices)
+    images, labels = images[indices], labels[indices]
+    dev_indices = []
+    examples_per_class = int(images.shape[0] * part / num_classes)
+    counters = [0] * num_classes
+    for i in xrange(images.shape[0]):
+        label = int(labels[i])
+        if counters[label] < examples_per_class:
+            dev_indices.append(i)
+            counters[label] += 1
+        elif sum(counters) > (examples_per_class * num_classes):
+            break
+    train_indices = list(set(range(len(images))) - set(dev_indices))
+    dev_images, dev_labels = images[dev_indices], labels[dev_indices]
+    train_images, train_labels = images[train_indices], labels[train_indices]
+    return train_images, train_labels, dev_images, dev_labels
+
+
+def train_on(pool, crossover, generations, train_images, train_labels, dev_images, dev_labels,
+             mutation_prob, elitism=False, elitism_fraction=0.05):
     print "+------------+-----------+------------+-----------+-----------+----------+"
     print "| Generation | Gen. Time | Worst Loss | Worst Acc | Best Loss | Best Acc |"
     print "+------------+-----------+------------+-----------+-----------+----------+"
     start = time()
     for i in xrange(generations - 1):
-        ranking, worst_loss, worst_acc, best_loss, best_acc = rank(pool, train_images, train_labels)
+        ranking = rank(pool, train_images, train_labels)
         new_pool = mate(ranking, crossover, elitism, elitism_fraction)
         pool = map(lambda c: mutate(c, mutation_prob), new_pool)
 
         if i % 100 == 99:
+            best, worst = ranking[0], ranking[-1]
+            best_acc, best_loss = accuracy_and_loss(best, dev_images, dev_labels)
+            worst_acc, worst_loss = accuracy_and_loss(worst, train_images, train_labels)
             print "| {:^10} | {:^8.4f}s | {:^10.4f} | {:^8.4f}% | {:^9.4f} | {:^7.4f}% |".format(
                 i+1, time() - start, worst_loss, worst_acc * 100.0, best_loss, best_acc * 100.0)
             start = time()
 
-    ranking, worst_loss, worst_acc, best_loss, best_acc = rank(pool, train_images, train_labels)
+    ranking = rank(pool, dev_images, dev_labels)
+    best, worst = ranking[0], ranking[-1]
+    best_acc, best_loss = accuracy_and_loss(best, dev_images, dev_labels)
+    worst_acc, worst_loss = accuracy_and_loss(worst, train_images, train_labels)
     print "| {:^10} | {:^8.4f}s | {:^10.4f} | {:^8.4f}% | {:^9.4f} | {:^7.4f}% |".format(
         generations, time() - start, worst_loss, worst_acc * 100.0, best_loss, best_acc * 100.0)
     print "+------------+-----------+------------+-----------+-----------+----------+"
@@ -195,11 +223,11 @@ def train_on(pool, crossover, generations, train_images, train_labels, mutation_
 
 def main(sizes):
     # parameters
-    activ_func = relu
+    activ_funcs = [relu, sigmoid, tanh]
     pool_size = 100
-    generations = 1000
-    mutation_prob = 0.1
-    crossover = cross_over_by_row  # todo crossover
+    generations = 100
+    mutation_prob = 0.001
+    crossover = cross_over_by_row
     elitism = True
     elitism_fraction = 0.1
 
@@ -207,14 +235,19 @@ def main(sizes):
     dataloader = MNIST(return_type="numpy")
     train_images, train_labels = dataloader.load_training()
     test_images, test_labels = dataloader.load_testing()
+    train_images, train_labels, dev_images, dev_labels = split_train_dev(train_images, train_labels)
     train_images = train_images.astype(np.float) / 255.0
+    dev_images = dev_images.astype(np.float) / 255.0
     test_images = test_images.astype(np.float) / 255.0
 
-    pool = create_pool(sizes, pool_size, activ_func)
-    best = train_on(pool, crossover, generations, train_images, train_labels, mutation_prob, elitism, elitism_fraction)
-    acc, loss = accuracy_and_loss(best, test_images, test_labels)
+    pool = create_pool(sizes, pool_size, activ_funcs)
+    best = train_on(pool, crossover, generations, train_images, train_labels, dev_images, dev_labels, mutation_prob,
+                    elitism, elitism_fraction)
+    acc, loss, preds = accuracy_and_loss(best, test_images, test_labels, return_preds=True)
 
     print "Accuracy on Test Set is {}% and Loss is {}".format(acc * 100.0, loss)
+    with open("ga_test.pred", "w") as f:
+        f.writelines(map(lambda x: str(int(x)) + "\n", preds))
 
 
 if __name__ == '__main__':
