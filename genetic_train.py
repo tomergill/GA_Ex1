@@ -1,23 +1,32 @@
 from chromosome import *
 from sys import argv
-from random import choice
 from time import time
 from mnist import MNIST
 
 
 
 
-def mutate(c, prob):
+def mutate_by_row(c, prob):
     """
     :type c: Chromosome
     :param c:
     :param prob:
     :return:
     """
-    mu, sigma = 0, 0.1
+    mu, sigma = 0, 0.01
     new_layers = []
     for W, b in c.layers:
-        new_W = W + np.random.binomial(1,prob) * np.random.normal(mu, sigma, size=W.shape)
+        new_W = W + np.outer(np.random.binomial(1, prob, size=W.shape[0]), np.ones(W.shape[1])) * np.random.normal(mu, sigma, size=W.shape)
+        new_b = b + np.random.binomial(1, prob, size=b.shape[0]) * np.random.normal(mu, sigma, size=b.shape[0])
+        new_layers.append((new_W, new_b))
+    return Chromosome(new_layers, c.activation_func, False)
+
+
+def mutate_all_weight(c, prob):
+    mu, sigma = 0, 0.01
+    new_layers = []
+    for W, b in c.layers:
+        new_W = W + np.random.binomial(1, prob) * np.random.normal(mu, sigma, size=W.shape)
         new_b = b + np.random.binomial(1, prob) * np.random.normal(mu, sigma, size=b.shape[0])
         new_layers.append((new_W, new_b))
     return Chromosome(new_layers, c.activation_func, False)
@@ -39,7 +48,7 @@ def cross_over_by_row(c1, c2):
         w = w1*m + w2 * (1-m)
         b = v*b1 + (1-v)*b2
         layers.append((w,b))
-    return Chromosome(layers=layers, activ_func=c1.activation_func if v[0] == 0 else c2.activation_func, initialize=False)
+    return Chromosome(layers=layers, activ_func=c1.activation_func if np.random.randint(2) else c2.activation_func, initialize=False)
 
 def cross_over_by_layer(c1, c2):
     """
@@ -92,13 +101,22 @@ def accuracy_and_loss(net, X, Y, return_preds=False):
     #     total_loss += neglogloss(out, y)
     #     good += (np.argmax(out) == y)
     # return good / X.shape[0], total_loss / X.shape[0]
-    out = batched_forward(net, X)
-    preds = np.argmax(out, axis=1)
-    acc = (preds == Y).sum() / float(X.shape[0])
-    loss = batched_neglogloss(out, Y).sum() / float(X.shape[0])
+    batch_size= 256
+    acc = loss = 0.0
+    preds_list = []
+    for i in range(0, X.shape[0], batch_size):
+        x, y = X[i:i+batch_size], Y[i:i+batch_size]
+        out = batched_forward(net, x)
+        preds = np.argmax(out, axis=1)
+        acc += (preds == y).sum()
+        loss += batched_neglogloss(out, y).sum()
+        if return_preds:
+            preds_list.extend(preds)
 
+    acc /= float(X.shape[0])
+    loss /= float(X.shape[0])
     if return_preds:
-        return acc, loss, preds
+        return acc, loss, preds_list
     return acc, loss
 
 
@@ -151,8 +169,11 @@ def mate(ranking, crossover, elitism, elitism_fraction):
     return new_pool
 
 
-def rank(pool, train_images, train_labels, sort_by_loss=True):
-    x, y = random_set_from(train_images, train_labels)
+def rank(pool, images, labels, sort_by_loss=True, use_random_set=True):
+    if use_random_set:
+        x, y = random_set_from(images, labels, size=1000)  # todo remove
+    else:
+        x, y = images, labels
     results = map(lambda c: accuracy_and_loss(c, x, y), pool)
     pool_acc, pool_loss = zip(*results)
 
@@ -186,7 +207,7 @@ def split_train_dev(images, labels, part=0.2, num_classes=10):
 
 
 def train_on(pool, crossover, generations, train_images, train_labels, dev_images, dev_labels,
-             mutation_prob, elitism=False, elitism_fraction=0.05):
+             mutation_prob, mutate, elitism=False, elitism_fraction=0.05):
     print "+------------+-----------+------------+-----------+-----------+----------+"
     print "| Generation | Gen. Time | Worst Loss | Worst Acc | Best Loss | Best Acc |"
     print "+------------+-----------+------------+-----------+-----------+----------+"
@@ -197,14 +218,17 @@ def train_on(pool, crossover, generations, train_images, train_labels, dev_image
         pool = map(lambda c: mutate(c, mutation_prob), new_pool)
 
         if i % 100 == 99:
-            best, worst = ranking[0], ranking[-1]
+            dev_ranking = rank(ranking, dev_images, dev_labels, sort_by_loss=False, use_random_set=False)
+            best, worst = dev_ranking[0], dev_ranking[-1]
             best_acc, best_loss = accuracy_and_loss(best, dev_images, dev_labels)
             worst_acc, worst_loss = accuracy_and_loss(worst, train_images, train_labels)
             print "| {:^10} | {:^8.4f}s | {:^10.4f} | {:^8.4f}% | {:^9.4f} | {:^7.4f}% |".format(
                 i+1, time() - start, worst_loss, worst_acc * 100.0, best_loss, best_acc * 100.0)
             start = time()
+        if i % 1000 == 999:
+            mutation_prob -= 0.005
 
-    ranking = rank(pool, dev_images, dev_labels)
+    ranking = rank(pool, dev_images, dev_labels, sort_by_loss=False, use_random_set=False)
     best, worst = ranking[0], ranking[-1]
     best_acc, best_loss = accuracy_and_loss(best, dev_images, dev_labels)
     worst_acc, worst_loss = accuracy_and_loss(worst, train_images, train_labels)
@@ -217,9 +241,10 @@ def train_on(pool, crossover, generations, train_images, train_labels, dev_image
 def main(sizes):
     # parameters
     activ_funcs = [relu, sigmoid, tanh]
-    pool_size = 100
-    generations = 100
-    mutation_prob = 0.001
+    pool_size = 150
+    generations = 7500
+    mutation_prob = 0.05
+    mutate = mutate_by_row
     crossover = cross_over_by_row
     elitism = True
     elitism_fraction = 0.1
@@ -244,10 +269,13 @@ def main(sizes):
 
     pool = create_pool(sizes, pool_size, activ_funcs)
     best = train_on(pool, crossover, generations, train_images, train_labels, dev_images, dev_labels, mutation_prob,
-                    elitism, elitism_fraction)
-    acc, loss, preds = accuracy_and_loss(best, test_images, test_labels, return_preds=True)
+                    mutate, elitism, elitism_fraction)
+    print ""
 
+    start = time()
+    acc, loss, preds = accuracy_and_loss(best, test_images, test_labels, return_preds=True)
     print "Accuracy on Test Set is {}% and Loss is {}".format(acc * 100.0, loss)
+    print "It took {} seconds".format(time() - start)
     with open("ga_test.pred", "w") as f:
         f.writelines(map(lambda x: str(int(x)) + "\n", preds))
 
@@ -255,7 +283,7 @@ def main(sizes):
 if __name__ == '__main__':
     #cross_over_full_layer(1,2)
     if len(argv) == 1:
-        sizes = [784, 200, 10]
+        sizes = [784, 200, 100, 10]
     else:
         sizes = [784] + map(int, argv[1:]) + [10]
     main(sizes)
