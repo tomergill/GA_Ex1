@@ -242,7 +242,7 @@ def main(sizes):
     # parameters
     activ_funcs = [relu, sigmoid, tanh]
     pool_size = 150
-    generations = 7500
+    generations = 10000
     mutation_prob = 0.05
     mutate = mutate_by_row
     crossover = cross_over_by_row
@@ -283,7 +283,7 @@ def main(sizes):
 if __name__ == '__main__':
     #cross_over_full_layer(1,2)
     if len(argv) == 1:
-        sizes = [784, 200, 100, 10]
+        sizes = [784, 200, 100, 40, 10]
     else:
         sizes = [784] + map(int, argv[1:]) + [10]
     main(sizes)
