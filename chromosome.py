@@ -2,7 +2,19 @@ import numpy as np
 
 
 class Chromosome:
+    """
+    Class representing a chromosome, storing it's layers and it's activation function.
+    """
+
     def __init__(self, layers, activ_func, initialize=True):
+        """
+        Constructor.
+        :param layers:
+            If initialize is true, then layers is a list of layer's dimensions, including the input size
+            and output size. Otherwise, it's the layers themselves.
+        :param activ_func: activation function (type func)
+        :param initialize: If true initializes the layers using Glorot, otherwise receives the layers
+        """
         if initialize:
             self.layers = []
             for s1, s2 in zip(layers[:-1], layers[1:]):
@@ -15,6 +27,11 @@ class Chromosome:
         self.n = len(self.layers)
 
     def forward(self, x):
+        """
+        Computes forward pass for chromosome
+        :param x: input vector
+        :return: output probabilities, a list containing the layers outputs before activation functions (zs)
+        """
         zs = [x]
         g = self.activation_func
         h = x
@@ -33,6 +50,12 @@ class Chromosome:
 
 
 def initialize_weight(s1, s2=None):
+    """
+    Glorot initialization.
+    :param s1: Dimension #1
+    :param s2: Dimension #2. If None, returns a vector.
+    :return: Initialized matrix / vector
+    """
     eps = np.sqrt(6.0 / (s1 + (s2 if s2 is not None else 1)))
     if s2 is None:
         return np.random.uniform(-eps, eps, s1)
@@ -40,21 +63,41 @@ def initialize_weight(s1, s2=None):
 
 
 def softmax(x):
+    """
+    Computes the probabilities given a vector of scores.
+    :param x: input vector
+    :return: Probabilities vector (sum = 1.0)
+    """
     exp = np.exp(x - x.max())
     return exp / exp.sum()
 
 
-
 def sigmoid(x):
+    """
+    Logistic Sigmoid function.
+    :param x: input
+    :return:  sigmoid output
+    """
     return 1 / (1 + np.exp(-x))
 
 
 def relu(x):
+    """
+    ReLu activation function.
+    :param x: input
+    :return: relu output
+    """
     return np.maximum(0, x)
 
 
-tanh = np.tanh
+tanh = np.tanh  # already implemented
 
 
 def neglogloss(y_hat, y):
+    """
+    Computes the negative log loss.
+    :param y_hat: Probabilities vector (sum = 1)
+    :param y: The correct tag (index)
+    :return: loss
+    """
     return -np.log(y_hat[y])

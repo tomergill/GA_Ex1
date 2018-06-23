@@ -5,15 +5,18 @@ from sys import argv
 from itertools import izip
 from mnist import MNIST
 
-g2dg = {sigmoid: lambda x: sigmoid(x) * (1- sigmoid(x)),
+# maps each activation function to it's derivative function
+g2dg = {sigmoid: lambda x: sigmoid(x) * (1 - sigmoid(x)),
         relu: lambda x: (x > 0).astype(np.int),
         tanh: lambda x: 1 - np.square(tanh(x))}
 
 
 def backprop(ch, x, y):
     """
-
-    :param ch:
+    Computes the back propagation algorithm for a given chromosome
+    :param y: correct tag
+    :param x: input vector
+    :param ch: Chromosome to backprop
     :type ch: Chromosome
     :return: loss and gradients (list of (gW, gb)s)
     """
@@ -42,7 +45,7 @@ def backprop(ch, x, y):
         z = zs[i]
         dL_dzi = dL_dzi.dot(prev_W) * dg(z)
         gb = dL_dzi
-        gW = np.outer(dL_dzi, g(zs[i-1]))
+        gW = np.outer(dL_dzi, g(zs[i - 1]))
         grads.append((gW, gb))
         prev_W = W
 
@@ -50,12 +53,27 @@ def backprop(ch, x, y):
 
 
 def sgd_update(ch, grads, lr):
+    """
+    Updates chromosome's weights using sgd update: w_new = w_old + lr*(d Loss / d w_old)
+    :param ch: Chromosome to update
+    :param grads: List of gradients, in the same order of the chromosome's layers
+    :param lr: Learning rate
+    :return: None
+    """
     for layer, layer_grads in izip(ch.layers, grads):
         for weight, grad in izip(layer, layer_grads):
             weight -= lr * grad
 
 
 def accuracy_and_loss_on(ch, images, labels, return_pred=False):
+    """
+    Computes the output on images, then computes accuracy and loss
+    :param ch: Chromosome to test
+    :param images: Images matrix
+    :param labels: Labels vector
+    :param return_pred: If true, returns the prediction (output of chromosome)
+    :return: accuracy, average loss [, predictions list]
+    """
     if return_pred:
         preds = []
     total_loss = good = 0.0
@@ -70,7 +88,19 @@ def accuracy_and_loss_on(ch, images, labels, return_pred=False):
         return good / len(images), total_loss / len(images), preds
     return good / len(images), total_loss / len(images)
 
+
 def train_on(ch, train_images, train_labels, dev_images, dev_labels, epochs=15, lr=0.001):
+    """
+    Trains the network, after each epoch test on validation. Prints in a pretty table.
+    :param ch: Neural Network
+    :param train_images: Train images matrix
+    :param train_labels: Train images vecotr
+    :param dev_images: Validation images matrix
+    :param dev_labels: Validation images vector
+    :param epochs: Number of epochs to train on
+    :param lr: Learning rate
+    :return: None
+    """
     print "+-------+------------+-----------+----------+---------+------------+"
     print "| epoch | train loss | train acc | dev loss | dev acc | epoch time |"
     print "+-------+------------+-----------+----------+----------------------+"
@@ -92,6 +122,11 @@ def train_on(ch, train_images, train_labels, dev_images, dev_labels, epochs=15, 
 
 
 def main(sizes):
+    """
+    Main function. Loads data, creates net, trains it and tests it on test. writes predictions to file.
+    :param sizes: List of sized for the net, starting with input size and ending with output size
+    :return: None
+    """
     lr = 0.001
     epochs = 30
 
@@ -106,7 +141,7 @@ def main(sizes):
     train_images, train_labels = train_images[train_indices], train_labels[train_indices]
 
     train_images = train_images.astype(np.float) / 255.0
-    dev_images = dev_images.astype(np.float)  / 255.0
+    dev_images = dev_images.astype(np.float) / 255.0
     test_images = test_images.astype(np.float) / 255.0
 
     # create net, train and test
